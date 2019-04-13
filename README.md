@@ -1,2 +1,2 @@
 # Image-Captioning
-CSE 5523 Projext
+CSE 5523 Project
