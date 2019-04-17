@@ -13,7 +13,7 @@ from pycocotools.coco import COCO
 from DataLoader import CocoDataset
 from torch.nn.utils.rnn import pack_padded_sequence
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda')
 
 class Main():
     def __init__(self):
@@ -21,7 +21,7 @@ class Main():
         self.json = 'coco/annotations/captions_val2017.json'
         self.minCount = 5
         self.imgDir = 'coco/images'
-        self.batch_size = 64
+        self.batch_size = 32
         self.embed_size = 128
         self.hidden_size = 128
         self.num_layers = 1
@@ -90,10 +90,10 @@ class Main():
 
     def train(self):
 
-        coco = CocoDataset(root=self.imgDir, json=self.json, vocab=self.vocab, transform=self.transform)
+        coco = CocoDataset(imgDir=self.imgDir, annDir=self.json, vocab=self.vocab, transform=self.transform)
 
         total_length = len(coco)
-        train_length = int(0.8 * total_length)
+        train_length = int(0.8 * total_length) + 1
         val_length = int(0.1 * total_length)
         test_length = int(0.1 * total_length)
 
@@ -107,14 +107,15 @@ class Main():
 
         for epoch in range(self.num_epochs):
             for i, (images, captions, lengths) in enumerate(train_data_loader):
-
+                self.enc_model.train()
+                self.dec_model.train()
                 images = images.to(device)
                 captions = captions.to(device)
 
                 features = self.enc_model(images)
                 outputs = self.dec_model(features, captions, lengths)
 
-                labels = pack_padded_sequence(captions, lengths, batch_first=0)[0]
+                labels = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
                 loss = self.criterion(outputs, labels)
                 self.enc_model.zero_grad()
@@ -122,10 +123,12 @@ class Main():
 
                 loss.backward()
                 self.optimizer.step()
-
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item()))                
                 if i%50 == 0:
                     val_loss = self.validate(val_dataset)
                     print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Validation Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item(), val_loss, np.exp(val_loss)))
+                    torch.save(self.enc_model , 'enc_model.pt')
+                    torch.save(self.enc_model , 'dec_model.pt')
 
 
     def validate(self, val_dataset):
@@ -145,7 +148,7 @@ class Main():
             features = self.enc_model(images)
             outputs = self.dec_model(features, captions, lengths)
 
-            labels = pack_padded_sequence(captions, lengths, batch_first=0)[0]
+            labels = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             val_loss += self.criterion(outputs, labels).item()
 
