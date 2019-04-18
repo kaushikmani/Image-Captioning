@@ -12,6 +12,7 @@ from collections import Counter
 from pycocotools.coco import COCO
 from DataLoader import CocoDataset
 from torch.nn.utils.rnn import pack_padded_sequence
+import matplotlib.pyplot as plt
 
 device = torch.device('cuda')
 
@@ -153,9 +154,55 @@ class Main():
             val_loss += self.criterion(outputs, labels).item()
 
         return (val_loss/total_steps)
+    
+    def evaluate(self):
+        coco = CocoDataset(imgDir=self.imgDir, annDir=self.json, vocab=self.vocab, transform=self.transform)
+
+        total_length = len(coco)
+        train_length = int(0.8 * total_length) + 1
+        val_length = int(0.1 * total_length)
+        test_length = int(0.1 * total_length)
+
+        train_dataset, val_dataset, test_dataset = random_split(coco, [train_length, val_length, test_length])
+
+        val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
+
+        enc_model_saved = torch.load('enc_model.pt',map_location=torch.device('cuda'))
+        dec_model_saved = torch.load('dec_model.pt',map_location=torch.device('cuda'))
+        enc_model_saved.eval()
+        dec_model_saved.eval()
+        valiter = iter(val_data_loader)
+        images, captions, lengths = valiter.next()
+        # img = images[0]
+        # caption = captions[0]
+        # lengths = lengths[0]
+        print(type(img))
+        print(images.size())
+        print(captions)
+        # plt.show(images)
+        # plt.imshow(img.view(256,256,3))
+        # plt.show()
+        # img = img.view(1, 3, 256,256)
+        images = images.to(device)
+        captions = captions.to(device)
+        for t in captions:
+            for val in t:
+                print(self.vocab.itos[val],end=" ")
+            
+        
+        features = self.enc_model(images)
+        outputs = self.dec_model(features, captions, lengths)
+        print("Outputs : ",outputs)
+        labels = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+        print(labels.size())
+        print(labels)
+        for val in labels:
+            print(self.vocab.itos[val],end=" ")
+        # print("Labels : ",labels)
 
 if __name__ == '__main__':
 
     main = Main()
-    main.train()
+    # main.train()
+    main.evaluate()
 
