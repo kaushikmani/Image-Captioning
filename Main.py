@@ -7,21 +7,21 @@ import numpy as np
 from torch.utils.data import DataLoader, random_split
 from torchtext.vocab import Vocab
 from itertools import chain
-import nltk
 from collections import Counter
 from pycocotools.coco import COCO
 from DataLoader import CocoDataset
 from torch.nn.utils.rnn import pack_padded_sequence
 import matplotlib.pyplot as plt
+from PIL import Image
 
 device = torch.device('cuda')
 
 class Main():
     def __init__(self):
 
-        self.json = 'coco/annotations/captions_val2017.json'
+        self.json = '/content/drive/My Drive/MLProject/coco/annotations/captions_val2017.json'
         self.minCount = 5
-        self.imgDir = 'coco/images'
+        self.imgDir = '/content/drive/My Drive/MLProject/coco/images'
         self.batch_size = 32
         self.embed_size = 128
         self.hidden_size = 128
@@ -125,11 +125,11 @@ class Main():
                 loss.backward()
                 self.optimizer.step()
                 print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item()))                
-                if i%50 == 0:
+                if i%300 == 0:
                     val_loss = self.validate(val_dataset)
                     print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Validation Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item(), val_loss, np.exp(val_loss)))
                     torch.save(self.enc_model , 'enc_model.pt')
-                    torch.save(self.enc_model , 'dec_model.pt')
+                    torch.save(self.dec_model , 'dec_model.pt')
 
 
     def validate(self, val_dataset):
@@ -152,9 +152,10 @@ class Main():
             labels = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             val_loss += self.criterion(outputs, labels).item()
+            print("I in val : ",i)
 
         return (val_loss/total_steps)
-    
+      
     def evaluate(self):
         coco = CocoDataset(imgDir=self.imgDir, annDir=self.json, vocab=self.vocab, transform=self.transform)
 
@@ -165,7 +166,7 @@ class Main():
 
         train_dataset, val_dataset, test_dataset = random_split(coco, [train_length, val_length, test_length])
 
-        val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
+        val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=2, shuffle=True,collate_fn=self.collate_fn)
 
         enc_model_saved = torch.load('enc_model.pt',map_location=torch.device('cuda'))
         dec_model_saved = torch.load('dec_model.pt',map_location=torch.device('cuda'))
@@ -173,36 +174,32 @@ class Main():
         dec_model_saved.eval()
         valiter = iter(val_data_loader)
         images, captions, lengths = valiter.next()
-        # img = images[0]
-        # caption = captions[0]
-        # lengths = lengths[0]
-        print(type(img))
-        print(images.size())
+        img = images[0]
+        img = img.numpy()
         print(captions)
-        # plt.show(images)
-        # plt.imshow(img.view(256,256,3))
-        # plt.show()
-        # img = img.view(1, 3, 256,256)
+        plt.imshow(np.transpose(img, (1, 2, 0)))
+        plt.show()
         images = images.to(device)
         captions = captions.to(device)
         for t in captions:
             for val in t:
-                print(self.vocab.itos[val],end=" ")
-            
-        
-        features = self.enc_model(images)
-        outputs = self.dec_model(features, captions, lengths)
-        print("Outputs : ",outputs)
-        labels = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-        print(labels.size())
-        print(labels)
-        for val in labels:
-            print(self.vocab.itos[val],end=" ")
-        # print("Labels : ",labels)
+                print(self.vocab.itos[val],end=" ")  
+            break
+        print()
+        features = enc_model_saved(images)
+        sampled_ids = dec_model_saved.sample(features)
+        sampled_ids = sampled_ids[0].cpu().numpy() 
+        sampled_caption = []
+        for word_id in sampled_ids:
+            word = self.vocab.itos[word_id]
+            sampled_caption.append(word)
+            if word == '<end>':
+                break
+        sentence = ' '.join(sampled_caption)
+        print(sentence)
 
 if __name__ == '__main__':
 
     main = Main()
-    # main.train()
     main.evaluate()
-
+#     main.train()
