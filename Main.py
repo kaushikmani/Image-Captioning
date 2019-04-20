@@ -19,9 +19,9 @@ device = torch.device('cuda')
 class Main():
     def __init__(self):
 
-        self.json = '/content/drive/My Drive/MLProject/coco/annotations/captions_val2017.json'
+        self.json = 'coco/annotations/captions_val2017.json'
         self.minCount = 5
-        self.imgDir = '/content/drive/My Drive/MLProject/coco/images'
+        self.imgDir = 'coco/images'
         self.batch_size = 32
         self.embed_size = 128
         self.hidden_size = 128
@@ -32,6 +32,8 @@ class Main():
         self.vocab = self.build_vocab(self.json, self.minCount)
         self.transform = self.transform()
         self.vocab_size = len(self.vocab)
+        torch.manual_seed(42)
+        self.train_dataset, self.val_dataset, self.test_dataset = self.get_dataset()
 
         self.enc_model = EncoderModel(self.embed_size).to(device)
         self.dec_model = DecoderModel(self.embed_size , self.hidden_size, self.vocab_size, self.num_layers).to(device)
@@ -88,8 +90,7 @@ class Main():
 
         return images, targets, lengths
 
-
-    def train(self):
+    def get_dataset(self):
 
         coco = CocoDataset(imgDir=self.imgDir, annDir=self.json, vocab=self.vocab, transform=self.transform)
 
@@ -100,10 +101,13 @@ class Main():
 
         train_dataset, val_dataset, test_dataset = random_split(coco, [train_length, val_length, test_length])
 
-        train_data_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
+        return train_dataset, val_dataset, test_dataset
 
 
+    def train(self):
 
+
+        train_data_loader = torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
         total_step = len(train_data_loader)
 
         for epoch in range(self.num_epochs):
@@ -126,17 +130,15 @@ class Main():
                 self.optimizer.step()
                 print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item()))                
                 if i%300 == 0:
-                    val_loss = self.validate(val_dataset)
+                    val_loss = self.validate()
                     print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Validation Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item(), val_loss, np.exp(val_loss)))
                     torch.save(self.enc_model , 'enc_model.pt')
                     torch.save(self.dec_model , 'dec_model.pt')
 
 
-    def validate(self, val_dataset):
+    def validate(self):
 
-        val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
-
-
+        val_data_loader = torch.utils.data.DataLoader(dataset=self.val_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
         total_steps = len(val_data_loader)
 
         self.enc_model.eval()
@@ -154,22 +156,15 @@ class Main():
             val_loss += self.criterion(outputs, labels).item()
             print("I in val : ",i)
 
-        return (val_loss/total_steps)
+        return val_loss/total_steps
       
     def evaluate(self):
-        coco = CocoDataset(imgDir=self.imgDir, annDir=self.json, vocab=self.vocab, transform=self.transform)
 
-        total_length = len(coco)
-        train_length = int(0.8 * total_length) + 1
-        val_length = int(0.1 * total_length)
-        test_length = int(0.1 * total_length)
-
-        train_dataset, val_dataset, test_dataset = random_split(coco, [train_length, val_length, test_length])
-
-        val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=2, shuffle=True,collate_fn=self.collate_fn)
+        val_data_loader = torch.utils.data.DataLoader(dataset=self.val_dataset, batch_size=2, shuffle=True,collate_fn=self.collate_fn)
 
         enc_model_saved = torch.load('enc_model.pt',map_location=torch.device('cuda'))
         dec_model_saved = torch.load('dec_model.pt',map_location=torch.device('cuda'))
+
         enc_model_saved.eval()
         dec_model_saved.eval()
         valiter = iter(val_data_loader)
@@ -201,5 +196,5 @@ class Main():
 if __name__ == '__main__':
 
     main = Main()
-    main.evaluate()
-#     main.train()
+   # main.evaluate()
+    main.train()
