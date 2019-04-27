@@ -11,7 +11,7 @@ class AttentionEncoder(nn.Module):
         super(AttentionEncoder, self).__init__()
 
         self.enc_image_size = encoded_image
-        self.resnet = torchvision.models.resnet18(pretrained=True)
+        self.resnet = torchvision.models.resnet101(pretrained=True)
 
         self.modules = list(self.resnet.children())[:-2]
         self.resnet = nn.Sequential(*self.modules)
@@ -87,7 +87,7 @@ class AttentionDecoder(nn.Module):
 
     def init_weights(self):
 
-        self.embedding_dim.weight.data.uniform_(-0.1, 0.1)
+        self.embedding.weight.data.uniform_(-0.1, 0.1)
         self.linear.bias.data.fill_(0)
         self.linear.weight.data.uniform_(-0.1, 0.1)
 
@@ -111,7 +111,8 @@ class AttentionDecoder(nn.Module):
         num_pixels = encoder_out.size(1)
 
         # Sorting according to descending lengths -> Used for dynamic batching (explained afterwards)
-        caption_len, index = caption_len.squeeze(1).sort(dim=0, descending=True)
+        # print(caption_len.size())
+        caption_len, index = caption_len.sort(dim=0, descending=True)
         encoder_out = encoder_out[index]
         captions = captions[index]
 
@@ -120,10 +121,11 @@ class AttentionDecoder(nn.Module):
 
         # Using length - 1 to not include <end>
         decoder_length = (caption_len - 1).tolist()
-
+        # print("Decoder length : ",decoder_length)
         pred = torch.zeros(batch_size, max(decoder_length), vocab_size).to(device)
-        alpha = torch.zeros(batch_size, max(decoder_length), num_pixels).to(device)
-
+        alphas = torch.zeros(batch_size, max(decoder_length), num_pixels).to(device)
+        # print("Pred Size : ",pred.size())
+        # print("Alpha Size : ",alphas.size())
         # Dynamic batching used here. We use lstm cell which runs over only one time step at once. We only go through samples which doesn't have <pad> at that timestep.
         for i in range(max(decoder_length)):
             batch_size_i = sum([l > i for l in  decoder_length])
@@ -143,8 +145,8 @@ class AttentionDecoder(nn.Module):
             #Predicted output
             preds = self.linear(self.dropout(h))
             pred[:batch_size_i, i, :] = preds
-            alpha[:batch_size_i, i, :] = alpha
+            alphas[:batch_size_i, i, :] = alpha
 
 
-        return pred, captions, decoder_length, alpha, index
+        return pred, captions, decoder_length, alphas, index
 

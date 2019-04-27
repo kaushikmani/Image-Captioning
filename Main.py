@@ -3,6 +3,7 @@ import torchvision.transforms as transforms
 import torch
 import torch.nn as nn
 from Model import EncoderModel, DecoderModel
+from Train_Attention import train_attention_model
 import numpy as np
 from torch.utils.data import DataLoader, random_split
 from torchtext.vocab import Vocab
@@ -106,7 +107,6 @@ class Main():
 
     def train(self):
 
-
         train_data_loader = torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size, shuffle=True,collate_fn=self.collate_fn)
         total_step = len(train_data_loader)
 
@@ -134,6 +134,14 @@ class Main():
                     print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, Validation Loss: {:.4f}, Perplexity: {:5.4f}'.format(epoch+1, self.num_epochs, i+1, total_step, loss.item(), val_loss, np.exp(val_loss)))
                     torch.save(self.enc_model , 'enc_model.pt')
                     torch.save(self.dec_model , 'dec_model.pt')
+
+    def train_attention(self):
+
+        train_data_loader = torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=self.batch_size,
+                                                        shuffle=True, collate_fn=self.collate_fn)
+        val_data_loader = torch.utils.data.DataLoader(dataset=self.val_dataset, batch_size=self.batch_size,
+                                                      shuffle=True, collate_fn=self.collate_fn)
+        train_attention_model(self.vocab_size, train_data_loader, val_data_loader)
 
 
     def validate(self):
@@ -196,5 +204,6 @@ class Main():
 if __name__ == '__main__':
 
     main = Main()
+    main.train_attention()
    # main.evaluate()
-    main.train()
+   #  main.train()
